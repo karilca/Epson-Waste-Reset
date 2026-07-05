@@ -14,6 +14,7 @@
 #include "ewr/generator.h"
 #include "ewr/parser.h"
 #include "ewr/usb.h"
+#include "gui/gui_app.h"
 
 static void glfw_error_callback(int error, const char* description)
 {
@@ -76,8 +77,10 @@ int main(int argc, char** argv)
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init(glsl_version);
 
-    // Our state
-    bool show_demo_window = false;
+    // Initialize our functional GUI application logic
+    ewr::EwrGuiApp app;
+    app.Initialize();
+
     ImVec4 clear_color = ImVec4(0.15f, 0.15f, 0.15f, 1.00f);
 
     // Main loop
@@ -90,30 +93,8 @@ int main(int argc, char** argv)
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
-        if (show_demo_window)
-            ImGui::ShowDemoWindow(&show_demo_window);
-
-        // Render our placeholder window
-        {
-            static float f = 0.0f;
-            static int counter = 0;
-
-            ImGui::Begin("EWR - Epson Waste Reset (Placeholder)");
-
-            ImGui::Text("Welcome to the Epson Waste Reset GUI!");
-            ImGui::Checkbox("Show Demo Window", &show_demo_window);
-
-            ImGui::SliderFloat("float", &f, 0.0f, 1.0f);
-            ImGui::ColorEdit3("clear color", (float*)&clear_color);
-
-            if (ImGui::Button("Reset Waste Ink Pad"))
-                counter++;
-            ImGui::SameLine();
-            ImGui::Text("counter = %d", counter);
-
-            ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
-            ImGui::End();
-        }
+        // Render the actual fully-functional application UI
+        app.RenderUI();
 
         // Rendering
         ImGui::Render();
@@ -128,6 +109,7 @@ int main(int argc, char** argv)
     }
 
     // Cleanup
+    app.Shutdown();
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
