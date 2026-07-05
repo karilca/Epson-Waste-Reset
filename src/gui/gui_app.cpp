@@ -209,7 +209,24 @@ void EwrGuiApp::RenderUI() {
     // Apply styling (Dark Theme)
     ImGui::StyleColorsDark();
     
-    ImGui::Begin("Epson Waste Ink Pad Resetter");
+    // Make the ImGui window cover the entire GLFW window viewport (making it feel native)
+    const ImGuiViewport* viewport = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(viewport->WorkPos);
+    ImGui::SetNextWindowSize(viewport->WorkSize);
+    
+    ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoTitleBar | 
+                                    ImGuiWindowFlags_NoCollapse | 
+                                    ImGuiWindowFlags_NoResize | 
+                                    ImGuiWindowFlags_NoMove | 
+                                    ImGuiWindowFlags_NoBringToFrontOnFocus | 
+                                    ImGuiWindowFlags_NoNavFocus;
+    
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(15.0f, 15.0f));
+    
+    ImGui::Begin("Epson Waste Ink Pad Resetter", nullptr, window_flags);
+    ImGui::PopStyleVar(3);
     
     // F6: Administrative Privilege Warning Banner
     if (!has_admin_privileges_) {

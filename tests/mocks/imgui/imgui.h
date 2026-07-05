@@ -29,6 +29,14 @@ enum ImGuiConfigFlags_ {
     ImGuiConfigFlags_NavEnableGamepad = 1 << 1
 };
 
+struct ImGuiViewport {
+    ImVec2 Pos;
+    ImVec2 Size;
+    ImVec2 WorkPos;
+    ImVec2 WorkSize;
+    ImGuiViewport() : Pos(0,0), Size(800,600), WorkPos(0,0), WorkSize(800,600) {}
+};
+
 struct ImGuiIO {
     ImVec2 DisplaySize;
     float DeltaTime;
@@ -40,6 +48,23 @@ struct ImGuiIO {
 struct ImGuiStyle {
     ImVec4 Colors[60];
 };
+
+enum ImGuiWindowFlags_ {
+    ImGuiWindowFlags_None = 0,
+    ImGuiWindowFlags_NoTitleBar = 1 << 0,
+    ImGuiWindowFlags_NoResize = 1 << 1,
+    ImGuiWindowFlags_NoMove = 1 << 2,
+    ImGuiWindowFlags_NoCollapse = 1 << 5,
+    ImGuiWindowFlags_NoBringToFrontOnFocus = 1 << 13,
+    ImGuiWindowFlags_NoNavFocus = 1 << 15
+};
+
+enum ImGuiStyleVar_ {
+    ImGuiStyleVar_WindowRounding,
+    ImGuiStyleVar_WindowBorderSize,
+    ImGuiStyleVar_WindowPadding
+};
+
 
 struct MockWidget {
     std::string type; // "Text", "Button", "InputText", "Selectable", "ProgressBar", "Window"
@@ -181,6 +206,15 @@ namespace ImGui {
     
     void PushStyleColor(ImGuiCol idx, const ImVec4& col);
     void PopStyleColor(int count = 1);
+    
+    const ImGuiViewport* GetMainViewport();
+    void SetNextWindowPos(const ImVec2& pos, int cond = 0, const ImVec2& pivot = ImVec2(0,0));
+    void SetNextWindowSize(const ImVec2& size, int cond = 0);
+
+    typedef int ImGuiStyleVar;
+    void PushStyleVar(ImGuiStyleVar idx, float val);
+    void PushStyleVar(ImGuiStyleVar idx, const ImVec2& val);
+    void PopStyleVar(int count = 1);
     
     void SetScrollHereY(float center_y_ratio = 0.5f);
     

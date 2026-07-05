@@ -53,7 +53,7 @@ int main(int argc, char** argv)
 #endif
 
     // Create window with graphics context
-    GLFWwindow* window = glfwCreateWindow(1280, 720, "EWR - Epson Waste Reset", nullptr, nullptr);
+    GLFWwindow* window = glfwCreateWindow(800, 600, "EWR - Epson Waste Reset", nullptr, nullptr);
     if (window == nullptr)
     {
         std::cerr << "Failed to create GLFW window" << std::endl;

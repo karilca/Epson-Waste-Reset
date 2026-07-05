@@ -135,6 +135,19 @@ void Dummy(const ImVec2& size) {}
 void PushStyleColor(ImGuiCol idx, const ImVec4& col) {}
 void PopStyleColor(int count) {}
 
+static ImGuiViewport g_viewport;
+
+const ImGuiViewport* GetMainViewport() {
+    return &g_viewport;
+}
+
+void SetNextWindowPos(const ImVec2& pos, int cond, const ImVec2& pivot) {}
+void SetNextWindowSize(const ImVec2& size, int cond) {}
+
+void PushStyleVar(ImGuiStyleVar idx, float val) {}
+void PushStyleVar(ImGuiStyleVar idx, const ImVec2& val) {}
+void PopStyleVar(int count) {}
+
 void SetScrollHereY(float center_y_ratio) {}
 
 void Render() {}
