@@ -1,77 +1,77 @@
 # EWR (Epson Waste Reset)
-![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-blue)
+![Platforma](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-blue)
 ![C++](https://img.shields.io/badge/language-C++17-orange)
-![License](https://img.shields.io/badge/license-Apache_License_2.0-green)
+![Licenca](https://img.shields.io/badge/license-Apache_License_2.0-green)
 
-A free, cross-platform, and completely open-source C++ utility to reset the "Waste Ink Pad" counter on Epson printers. 
+Besplatan, višeplatformski i potpuno open-source C++ alat za resetiranje brojača "Waste Ink Pad" na Epson pisačima.
 
-EWR bypasses the need to pay for sketchy third-party reset keys (like WIC Reset) or run malicious, virus-flagged `AdjProg.exe` binaries. By dynamically generating IEEE 1284.4 hardware packets and utilizing a continuously updated database, EWR communicates directly with the printer's motherboard over USB to safely zero out the EEPROM waste counters.
+EWR zaobilazi potrebu za plaćanjem sumnjivih ključeva za resetiranje trećih strana (poput WIC Reset) ili pokretanja zlonamjernih, antivirusno označenih `AdjProg.exe` binarnih datoteka. Dinamičkim generiranjem IEEE 1284.4 hardverskih paketa i korištenjem kontinuirano ažurirane baze podataka, EWR komunicira izravno s matičnom pločom pisača putem USB-a kako bi sigurno nulirao EEPROM waste brojače.
 
-## Features
-* **Smart Protocol Engine:** Constructs exact EEPROM write packets (`|B`) on the fly based on specific printer models. It safely manages the IEEE 1284.4 (D4) hardware credit system to prevent buffer overflows and lockups.
-* **OTA Database Sync:** Automatically fetches a massive, continuously updated database of printer offsets and keys on startup using native OS APIs (Zero bloat).
-* **Cross-Platform Core:**
-  * **Windows:** Uses 100% native Win32 `SetupAPI` and robust Asynchronous `OVERLAPPED` I/O to safely drain the Windows Print Spooler buffers. Zero custom drivers required.
-  * **Linux:** Uses `libusb` to automatically detach the kernel driver (CUPS) for exclusive, raw hardware access.
-* **Zero Hardcoded PIDs:** Automatically scans your OS USB tree to find connected Epson printers.
-* **Replay Fallback:** If your printer is brand new and not in the database yet, EWR can still dynamically parse and execute raw Wireshark dumps (stripping USBPcap headers automatically).
+## Značajke
+* **Pametni protokolarni mehanizam:** Konstruira točne EEPROM write pakete (`|B`) u hodu na temelju specifičnih modela pisača. Sigurno upravlja IEEE 1284.4 (D4) hardverskim kreditnim sustavom kako bi spriječio prekoračenje međuspremnika i zaključavanja.
+* **OTA sinkronizacija baze podataka:** Automatski dohvaća ogromnu, kontinuirano ažuriranu bazu podataka offseta i ključeva pisača pri pokretanju koristeći nativne OS API-je (bez dodatnog opterećenja).
+* **Višeplatformska jezgra:**
+  * **Windows:** Koristi 100% nativni Win32 `SetupAPI` i robusni asinkroni `OVERLAPPED` I/O za sigurno pražnjenje Windows Print Spooler međuspremnika. Nisu potrebni nikakvi prilagođeni drajveri.
+  * **Linux:** Koristi `libusb` za automatsko odvajanje kernel drajvera (CUPS) radi ekskluzivnog, izravnog hardverskog pristupa.
+* **Nula hardkodiranih PID-ova:** Automatski skenira USB stablo vašeg OS-a kako bi pronašao priključene Epson pisače.
+* **Replay rezervna metoda:** Ako vaš pisač još nije u bazi podataka, EWR može dinamički parsirati i izvršiti sirove Wireshark snimke (automatski uklanjajući USBPcap zaglavlja).
 
-### Prerequisites (For Building from Source)
-* **Windows:** Visual Studio with MSVC C++ build tools.
-* **Linux (Arch/Debian):** `cmake`, `gcc`, `pkgconf`, `libusb-1.0-dev`, and `libcurl4-openssl-dev`.
+### Preduvjeti (Za izgradnju iz izvornog koda)
+* **Windows:** Visual Studio s MSVC C++ alatima za izgradnju.
+* **Linux (Arch/Debian):** `cmake`, `gcc`, `pkgconf`, `libusb-1.0-dev` i `libcurl4-openssl-dev`.
 
-## Usage
+## Korištenje
 
-1. Ensure your Epson printer is turned on and connected to your computer via USB.
-2. Run the executable:
-   * **Windows:** Double-click `ewr.exe`
-   * **Linux:** `sudo ./ewr` *(Raw USB access requires root)*
-3. **Note:** On the very first run, EWR requires an internet connection to download the latest printer database. Afterward, it works entirely offline.
-4. Type the number corresponding to your printer and hit Enter.
-5. Wait for the `SUCCESS` message, then **turn your printer off and back on using its physical power button** to commit the EEPROM changes to the motherboard.
+1. Provjerite je li vaš Epson pisač uključen i spojen na računalo putem USB-a.
+2. Pokrenite izvršnu datoteku:
+   * **Windows:** Dvaput kliknite na `ewr.exe`
+   * **Linux:** `sudo ./ewr` *(Izravni USB pristup zahtijeva root prava)*
+3. **Napomena:** Pri prvom pokretanju, EWR zahtijeva internetsku vezu za preuzimanje najnovije baze podataka pisača. Nakon toga, radi potpuno offline.
+4. Unesite broj koji odgovara vašem pisaču i pritisnite Enter.
+5. Pričekajte poruku `SUCCESS`, zatim **isključite pisač i ponovno ga uključite fizičkim gumbom za napajanje** kako biste EEPROM promjene pohranili na matičnu ploču.
 
-## Building from Source
+## Izgradnja iz izvornog koda
 
-Open your terminal in the root of the repository and run:
+Otvorite terminal u korijenu repozitorija i pokrenite:
 
 ```bash
-# 1. Generate the build files
+# 1. Generirajte datoteke za izgradnju
 cmake -B build
 
-# 2. Compile the project (Release mode)
+# 2. Kompajlirajte projekt (Release način)
 cmake --build build --config Release
 ```
-The compiled executable `(ewr.exe or ewr)` will be located in the `Release` directory.
+Kompajlirana izvršna datoteka `(ewr.exe ili ewr)` nalazit će se u direktoriju `Release`.
 
-## 🤝 Contributing a New Printer Model (Replay Fallback)
+## 🤝 Doprinos novim modelom pisača (Replay rezervna metoda)
 
-If your printer isn't in the database yet, you can still add support for it using our Replay method without writing a single line of code!
+Ako vaš pisač još nije u bazi podataka, možete mu dodati podršku korištenjem naše Replay metode bez pisanja ijedne linije koda!
 
-### Step 1: Capture the Hardware Conversation
-1. Install [Wireshark](https://www.wireshark.org/) (Ensure **USBPcap** is installed on Windows) on your VM
-2. Connect your printer to the PC and turn it on
-3. Connect your printer to the VM
-4. Open Wireshark and start capturing on your USB interface
-5. Open the sketchy Epson adjustment program you found on the internet inside the VM (this keeps your host machine safe from potential malware)
-6. Run the "Reset Waste Counters" command
-7. Stop the Wireshark capture immediately after the program says shutdown the printer
+### Korak 1: Snimite hardverski razgovor
+1. Instalirajte [Wireshark](https://www.wireshark.org/) (provjerite da je **USBPcap** instaliran na Windowsima) na vaš VM
+2. Spojite pisač na računalo i uključite ga
+3. Spojite pisač na VM
+4. Otvorite Wireshark i pokrenite snimanje na vašem USB sučelju
+5. Otvorite sumnjivi Epson program za podešavanje koji ste pronašli na internetu unutar VM-a (ovo čuva vaše host računalo od potencijalnog zlonamjernog softvera)
+6. Pokrenite naredbu "Reset Waste Counters"
+7. Odmah zaustavite Wireshark snimanje nakon što program kaže da isključite pisač
 
-### Step 2: Export the Payloads
-1. In Wireshark, type this exact filter into the display filter bar and hit Enter:
+### Korak 2: Izvezite podatke
+1. U Wiresharku, upišite ovaj točan filter u traku za prikaz filtera i pritisnite Enter:
    `usb.endpoint_address.direction == 0 && usb.transfer_type != 0x02`
-   *(This isolates the `URB_BULK out` packets sent to the printer).*
-2. Go to **File** -> **Export Packet Dissections** -> **As C Arrays...**
-3. Save the file with your printer's model name (e.g., `L3150.c`).
+   *(Ovo izolira `URB_BULK out` pakete poslane pisaču).*
+2. Idite na **File** -> **Export Packet Dissections** -> **As C Arrays...**
+3. Spremite datoteku s nazivom modela vašeg pisača (npr. `L3150.c`).
 
-### Step 3: Test and Open a Pull Request
-1. Drop your new `L3150.c` file into your local EWR `models/` folder.
-2. Run EWR. The parser will automatically strip the Wireshark metadata and execute the payload.
-3. If your waste counter successfully resets, open a Pull Request and upload your `.c` file to the repository so the rest of the world can use it!
+### Korak 3: Testirajte i otvorite Pull Request
+1. Smjestite novu `L3150.c` datoteku u lokalni EWR `models/` direktorij.
+2. Pokrenite EWR. Parser će automatski ukloniti Wireshark metapodatke i izvršiti podatke.
+3. Ako se vaš waste brojač uspješno resetira, otvorite Pull Request i prenesite vašu `.c` datoteku u repozitorij kako bi je ostatak svijeta mogao koristiti!
 
-Video Guide: https://youtu.be/PQzxifFqMsA
+Video vodič: https://youtu.be/PQzxifFqMsA
 
-## Credits
-Special thanks to the [reinkpy](https://codeberg.org/atufi/reinkpy) project for their fantastic database. EWR uses an automated GitHub Actions pipeline to sync and convert their TOML database into our C++ backend, merging their massive printer support with our standalone C++ execution environment.
+## Zahvale
+Posebna zahvala projektu [reinkpy](https://codeberg.org/atufi/reinkpy) za njihovu fantastičnu bazu podataka. EWR koristi automatizirani GitHub Actions cjevovod za sinkronizaciju i pretvaranje njihove TOML baze podataka u naš C++ backend, spajajući njihovu ogromnu podršku za pisače s našim samostalnim C++ izvršnim okruženjem.
 
-## ⚠️ Disclaimer
-Manipulating hardware via raw USB packets carries inherent risks. EWR is provided "as is" without warranty of any kind. By using this software, you accept full responsibility for your hardware.
+## ⚠️ Odricanje od odgovornosti
+Manipuliranje hardverom putem sirovih USB paketa nosi inherentne rizike. EWR se pruža "kakav jest" bez ikakve garancije. Korištenjem ovog softvera prihvaćate punu odgovornost za vaš hardver.
