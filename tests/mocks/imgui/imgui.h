@@ -111,7 +111,8 @@ enum ImGuiCol_ {
     ImGuiCol_ButtonActive,
     ImGuiCol_Header,
     ImGuiCol_HeaderHovered,
-    ImGuiCol_HeaderActive
+    ImGuiCol_HeaderActive,
+    ImGuiCol_PlotHistogram
 };
 
 // Simulation State Controller

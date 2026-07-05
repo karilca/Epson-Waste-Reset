@@ -436,14 +436,100 @@ void EwrGuiApp::RenderUI() {
     
     if (read_success_ && !read_values_.empty()) {
         ImGui::Spacing();
-        if (read_values_.size() == 1 && selected_smart_model.addresses.size() >= 1) {
-            ImGui::TextColored(ImVec4(0.3f, 0.9f, 0.3f, 1.0f), "Counter Value (Address %u): %u", selected_smart_model.addresses[0], read_values_[0]);
-        } else if (read_values_.size() >= 2 && selected_smart_model.addresses.size() >= 2) {
-            uint16_t combined = read_values_[0] | (read_values_[1] << 8);
-            ImGui::TextColored(ImVec4(0.3f, 0.9f, 0.3f, 1.0f), "Counters: Address %u = %u, Address %u = %u", 
-                               selected_smart_model.addresses[0], read_values_[0],
-                               selected_smart_model.addresses[1], read_values_[1]);
-            ImGui::TextColored(ImVec4(0.3f, 0.9f, 0.3f, 1.0f), "Combined Value: %u", combined);
+        
+        bool found_main_counter = false;
+        uint32_t main_counter_val = 0;
+        uint32_t main_counter_max = 15000;
+        std::string counter_name = "Main Waste Ink Pad Counter";
+        
+        const auto& addrs = selected_smart_model.addresses;
+        
+        // 1. Check for newer models (address 52 and 53)
+        auto it52 = std::find(addrs.begin(), addrs.end(), 52);
+        auto it53 = std::find(addrs.begin(), addrs.end(), 53);
+        if (it52 != addrs.end() && it53 != addrs.end()) {
+            size_t idx52 = std::distance(addrs.begin(), it52);
+            size_t idx53 = std::distance(addrs.begin(), it53);
+            if (idx52 < read_values_.size() && idx53 < read_values_.size()) {
+                main_counter_val = read_values_[idx52] | (read_values_[idx53] << 8);
+                main_counter_max = 15000; // standard limit for newer EcoTank models
+                found_main_counter = true;
+            }
+        }
+        
+        // 2. If not found, check for older models (address 28 and 29)
+        if (!found_main_counter) {
+            auto it28 = std::find(addrs.begin(), addrs.end(), 28);
+            auto it29 = std::find(addrs.begin(), addrs.end(), 29);
+            if (it28 != addrs.end() && it29 != addrs.end()) {
+                size_t idx28 = std::distance(addrs.begin(), it28);
+                size_t idx29 = std::distance(addrs.begin(), it29);
+                if (idx28 < read_values_.size() && idx29 < read_values_.size()) {
+                    main_counter_val = read_values_[idx28] | (read_values_[idx29] << 8);
+                    
+                    std::string nameLower = selected_model_name_;
+                    std::transform(nameLower.begin(), nameLower.end(), nameLower.begin(), ::tolower);
+                    if (nameLower.find("1400") != std::string::npos || 
+                        nameLower.find("1430") != std::string::npos || 
+                        nameLower.find("1500") != std::string::npos ||
+                        nameLower.find("l1800") != std::string::npos) {
+                        main_counter_max = 15000;
+                    } else {
+                        main_counter_max = 6207; // standard limit for older models
+                    }
+                    found_main_counter = true;
+                }
+            }
+        }
+
+        // 3. Check for PX series (58 and 59)
+        if (!found_main_counter) {
+            auto it58 = std::find(addrs.begin(), addrs.end(), 58);
+            auto it59 = std::find(addrs.begin(), addrs.end(), 59);
+            if (it58 != addrs.end() && it59 != addrs.end()) {
+                size_t idx58 = std::distance(addrs.begin(), it58);
+                size_t idx59 = std::distance(addrs.begin(), it59);
+                if (idx58 < read_values_.size() && idx59 < read_values_.size()) {
+                    main_counter_val = read_values_[idx58] | (read_values_[idx59] << 8);
+                    main_counter_max = 15000;
+                    found_main_counter = true;
+                }
+            }
+        }
+        
+        if (found_main_counter) {
+            float percent = (static_cast<float>(main_counter_val) / main_counter_max) * 100.0f;
+            if (percent > 100.0f) percent = 100.0f;
+            
+            ImGui::TextColored(ImVec4(0.3f, 0.9f, 0.3f, 1.0f), "%s:", counter_name.c_str());
+            ImGui::Text("  Value: %u / %u points", main_counter_val, main_counter_max);
+            
+            ImVec4 pct_color = ImVec4(0.3f, 0.9f, 0.3f, 1.0f); // Green
+            if (percent >= 90.0f) {
+                pct_color = ImVec4(0.9f, 0.3f, 0.3f, 1.0f); // Red
+            } else if (percent >= 80.0f) {
+                pct_color = ImVec4(0.9f, 0.6f, 0.2f, 1.0f); // Orange
+            }
+            
+            ImGui::Text("  Status: ");
+            ImGui::SameLine();
+            ImGui::TextColored(pct_color, "%.2f%% Full", percent);
+            
+            ImGui::Spacing();
+            ImGui::PushStyleColor(ImGuiCol_PlotHistogram, pct_color);
+            ImGui::ProgressBar(percent / 100.0f, ImVec2(-1.0f, 15.0f), "");
+            ImGui::PopStyleColor();
+        } else {
+            // Fallback for non-standard counter address layout
+            if (read_values_.size() == 1 && selected_smart_model.addresses.size() >= 1) {
+                ImGui::TextColored(ImVec4(0.3f, 0.9f, 0.3f, 1.0f), "Counter Value (Address %u): %u", selected_smart_model.addresses[0], read_values_[0]);
+            } else if (read_values_.size() >= 2 && selected_smart_model.addresses.size() >= 2) {
+                uint16_t combined = read_values_[0] | (read_values_[1] << 8);
+                ImGui::TextColored(ImVec4(0.3f, 0.9f, 0.3f, 1.0f), "Counters: Address %u = %u, Address %u = %u", 
+                                   selected_smart_model.addresses[0], read_values_[0],
+                                   selected_smart_model.addresses[1], read_values_[1]);
+                ImGui::TextColored(ImVec4(0.3f, 0.9f, 0.3f, 1.0f), "Combined Value: %u", combined);
+            }
         }
     }
     ImGui::EndChild();
