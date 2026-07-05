@@ -27,11 +27,15 @@ public:
     void AddWritePacket(const std::vector<unsigned char>& packet);
     const std::vector<std::vector<unsigned char>>& GetWritePackets() const;
 
+    bool ConsumeAck();
+
 private:
     MockUsbState();
     UsbScenario scenario_;
     int uid_;
     bool isAdmin_;
+    bool ack_available_;
     std::vector<std::vector<unsigned char>> write_packets_;
     mutable std::mutex mutex_;
 };
+

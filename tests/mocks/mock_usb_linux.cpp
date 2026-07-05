@@ -145,14 +145,16 @@ int libusb_bulk_transfer(libusb_device_handle* handle, unsigned char endpoint, u
             return LIBUSB_ERROR_TIMEOUT;
         }
         if (length >= 6) {
-            data[0] = 0x02;
-            data[1] = 0x02;
-            data[2] = 0x00;
-            data[3] = 0x06;
-            data[4] = 0x00;
-            data[5] = 0x00;
-            *transferred = 6;
-            return 0;
+            if (MockUsbState::Get().ConsumeAck()) {
+                data[0] = 0x02;
+                data[1] = 0x02;
+                data[2] = 0x00;
+                data[3] = 0x06;
+                data[4] = 0x00;
+                data[5] = 0x00;
+                *transferred = 6;
+                return 0;
+            }
         }
         *transferred = 0;
         return 0;

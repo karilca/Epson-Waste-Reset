@@ -150,6 +150,10 @@ void EwrGuiApp::Initialize() {
     custom_models_ = ScanModelsFolder("models");
     
     // Start OTA Sync asynchronously
+    if (ota_sync_running_) return;
+    if (ota_thread_.joinable()) {
+        ota_thread_.join();
+    }
     ota_sync_running_ = true;
     ota_status_text_ = "Syncing...";
     ota_thread_ = std::thread(&EwrGuiApp::RunOtaSyncThread, this);
@@ -158,20 +162,28 @@ void EwrGuiApp::Initialize() {
 void EwrGuiApp::RunOtaSyncThread() {
     std::cout << "[INFO] Starting OTA database sync..." << std::endl;
     bool success = generator_.SyncDatabaseOTA();
-    ota_sync_success_ = success;
     
     if (success) {
         std::cout << "[INFO] OTA sync successful. Loading updated database..." << std::endl;
         std::lock_guard<std::mutex> lock(data_mutex_);
-        generator_.LoadDatabase("database.json");
-        smart_models_ = generator_.GetAvailableModels();
-        ota_status_text_ = "Synced";
+        if (generator_.LoadDatabase("database.json")) {
+            smart_models_ = generator_.GetAvailableModels();
+            ota_status_text_ = "Synced";
+            ota_sync_success_ = true;
+        } else {
+            std::cout << "[WARNING] Failed to load downloaded database. Falling back..." << std::endl;
+            generator_.LoadDatabase("database.json");
+            smart_models_ = generator_.GetAvailableModels();
+            ota_status_text_ = "Failed (Using cache)";
+            ota_sync_success_ = false;
+        }
     } else {
         std::cout << "[WARNING] OTA sync failed. Falling back to local database.json..." << std::endl;
         std::lock_guard<std::mutex> lock(data_mutex_);
         generator_.LoadDatabase("database.json");
         smart_models_ = generator_.GetAvailableModels();
         ota_status_text_ = "Failed (Using cache)";
+        ota_sync_success_ = false;
     }
     ota_sync_running_ = false;
 }

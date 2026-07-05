@@ -421,6 +421,14 @@ TEST(GuiSuite, E2E_Startup_SyncCorrupt_Root) {
     WaitFor([&](){ return !app.IsOtaSyncRunning(); });
     // Should fall back cleanly and keep running
     EXPECT_TRUE(app.GetOtaStatusText().find("Failed") != std::string::npos);
+
+    // Clean up corrupted database.json to isolate this test from subsequent tests
+    std::ofstream f("database.json");
+    f << "{\n"
+      << "  \"L3150\": { \"rkey\": 17080, \"wkey\": \"L3150_KEY\", \"addresses\": [20, 21], \"reset\": [0, 0] },\n"
+      << "  \"L3210\": { \"rkey\": 17080, \"wkey\": \"L3210_KEY\", \"addresses\": [30], \"reset\": [0] }\n"
+      << "}";
+    f.close();
 }
 
 TEST(GuiSuite, E2E_SmartReset_Success) {

@@ -1,0 +1,4 @@
+{
+  "L3150": { "rkey": 17080, "wkey": "L3150_KEY", "addresses": [20, 21], "reset": [0, 0] },
+  "L3210": { "rkey": 17080, "wkey": "L3210_KEY", "addresses": [30], "reset": [0] }
+}
