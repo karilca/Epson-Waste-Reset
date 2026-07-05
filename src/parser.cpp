@@ -50,24 +50,34 @@ namespace ewr {
         }
 
         std::string content((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
-
-        std::regex arrayRegex(R"(\{([^}]+)\})");
-        auto array_begin = std::sregex_iterator(content.begin(), content.end(), arrayRegex);
-        auto array_end = std::sregex_iterator();
-
         std::vector<std::vector<unsigned char>> all_packets;
-        std::regex byteRegex(R"(0x[0-9a-fA-F]{1,2})");
 
-        for (std::sregex_iterator i = array_begin; i != array_end; ++i)
+        size_t pos = 0;
+        while (true)
         {
-            std::string arrayContent = i->str(1);
-            std::vector<unsigned char> current_packet;
+            size_t startBrace = content.find('{', pos);
+            if (startBrace == std::string::npos) break;
+            size_t endBrace = content.find('}', startBrace);
+            if (endBrace == std::string::npos) break;
 
-            auto byte_begin = std::sregex_iterator(arrayContent.begin(), arrayContent.end(), byteRegex);
-            for (std::sregex_iterator b = byte_begin; b != array_end; ++b) 
+            std::vector<unsigned char> current_packet;
+            for (size_t i = startBrace + 1; i < endBrace; ++i)
             {
-                unsigned char hexByte = static_cast<unsigned char>(std::stoul(b->str(), nullptr, 16));
-                current_packet.push_back(hexByte);
+                if (i + 2 < endBrace && content[i] == '0' && (content[i + 1] == 'x' || content[i + 1] == 'X'))
+                {
+                    size_t j = i + 2;
+                    while (j < endBrace && std::isxdigit(static_cast<unsigned char>(content[j])))
+                    {
+                        j++;
+                    }
+                    if (j > i + 2)
+                    {
+                        std::string hexStr = content.substr(i + 2, j - (i + 2));
+                        unsigned char hexByte = static_cast<unsigned char>(std::stoul(hexStr, nullptr, 16));
+                        current_packet.push_back(hexByte);
+                        i = j - 1;
+                    }
+                }
             }
 
             if (current_packet.size() >= 27 && current_packet[0] == 0x1B && current_packet[1] == 0x00) 
@@ -79,6 +89,8 @@ namespace ewr {
             {
                 all_packets.push_back(current_packet);
             }
+
+            pos = endBrace + 1;
         }
 
         return all_packets;

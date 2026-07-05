@@ -1,0 +1,75 @@
+[===============================================================]
+[==========] Running 82 tests.
+[ RUN      ] GeneratorSuite.SyncDatabaseOTA_Success
+[       OK ] GeneratorSuite.SyncDatabaseOTA_Success
+[ RUN      ] GeneratorSuite.SyncDatabaseOTA_Offline
+[       OK ] GeneratorSuite.SyncDatabaseOTA_Offline
+[ RUN      ] GeneratorSuite.SyncDatabaseOTA_Timeout
+[       OK ] GeneratorSuite.SyncDatabaseOTA_Timeout
+[ RUN      ] GeneratorSuite.LoadDatabase_ValidJson
+[       OK ] GeneratorSuite.LoadDatabase_ValidJson
+[ RUN      ] GeneratorSuite.LoadDatabase_MissingAddresses
+[       OK ] GeneratorSuite.LoadDatabase_MissingAddresses
+[ RUN      ] GeneratorSuite.LoadDatabase_MissingResetValues
+[       OK ] GeneratorSuite.LoadDatabase_MissingResetValues
+[ RUN      ] GeneratorSuite.LoadDatabase_CorruptJson
+[!] JSON Parse Error: [json.exception.parse_error.101] parse error at line 3, column 1: syntax error while parsing object key - unexpected end of input; expected string literal
+[       OK ] GeneratorSuite.LoadDatabase_CorruptJson
+[ RUN      ] GeneratorSuite.LoadDatabase_FileNotFound
+[       OK ] GeneratorSuite.LoadDatabase_FileNotFound
+[ RUN      ] GeneratorSuite.UniversalGenerator_IsEmpty
+[       OK ] GeneratorSuite.UniversalGenerator_IsEmpty
+[ RUN      ] GeneratorSuite.GenerateWritePacket_Format
+[       OK ] GeneratorSuite.GenerateWritePacket_Format
+[ RUN      ] GeneratorSuite.GenerateSequence_SafeInit
+[       OK ] GeneratorSuite.GenerateSequence_SafeInit
+[ RUN      ] GeneratorSuite.GenerateSequence_AddressValuesMatch
+[       OK ] GeneratorSuite.GenerateSequence_AddressValuesMatch
+[ RUN      ] GeneratorSuite.GenerateSequence_KeysEncoded
+[       OK ] GeneratorSuite.GenerateSequence_KeysEncoded
+[ RUN      ] GeneratorSuite.Database_ExtremeSize
+[       OK ] GeneratorSuite.Database_ExtremeSize
+[ RUN      ] GeneratorSuite.Database_InvalidModelFields
+[!] JSON Parse Error: [json.exception.type_error.302] type must be number, but is string
+[       OK ] GeneratorSuite.Database_InvalidModelFields
+[ RUN      ] ParserSuite.ScanModelsFolder_Empty
+[       OK ] ParserSuite.ScanModelsFolder_Empty
+[ RUN      ] ParserSuite.ScanModelsFolder_FiltersFiles
+[       OK ] ParserSuite.ScanModelsFolder_FiltersFiles
+[ RUN      ] ParserSuite.ScanModelsFolder_CreatesFolder
+[       OK ] ParserSuite.ScanModelsFolder_CreatesFolder
+[ RUN      ] ParserSuite.ParseWiresharkDump_ValidTxt
+[       OK ] ParserSuite.ParseWiresharkDump_ValidTxt
+[ RUN      ] ParserSuite.ParseWiresharkDump_ValidC
+[       OK ] ParserSuite.ParseWiresharkDump_ValidC
+[ RUN      ] ParserSuite.ParseWiresharkDump_StripHeader
+[       OK ] ParserSuite.ParseWiresharkDump_StripHeader
+[ RUN      ] ParserSuite.ParseWiresharkDump_EmptyOrInvalid
+[       OK ] ParserSuite.ParseWiresharkDump_EmptyOrInvalid
+[ RUN      ] ParserSuite.ParseWiresharkDump_FileNotFound
+Error: Could not open payload file.
+[       OK ] ParserSuite.ParseWiresharkDump_FileNotFound
+[ RUN      ] ParserSuite.Replay_MalformedWiresharkFiles
+[       OK ] ParserSuite.Replay_MalformedWiresharkFiles
+[ RUN      ] ParserSuite.Replay_HugeWiresharkFile
+[       OK ] ParserSuite.Replay_HugeWiresharkFile
+[ RUN      ] UsbSuite.CheckPrivileges_Root_Linux
+[       OK ] UsbSuite.CheckPrivileges_Root_Linux
+[ RUN      ] UsbSuite.CheckPrivileges_User_Linux
+[       OK ] UsbSuite.CheckPrivileges_User_Linux
+[ RUN      ] UsbSuite.CheckPrivileges_Admin_Windows
+[       OK ] UsbSuite.CheckPrivileges_Admin_Windows
+[ RUN      ] UsbSuite.CheckPrivileges_User_Windows
+[       OK ] UsbSuite.CheckPrivileges_User_Windows
+[ RUN      ] UsbSuite.USB_PowerCycleSimulator
+[SUCCESS] Auto-detected Epson Printer (PID: 1111)
+[SUCCESS] Auto-detected Epson Printer (PID: 1111)
+[SUCCESS] Auto-detected Epson Printer (PID: 1111)
+[SUCCESS] Auto-detected Epson Printer (PID: 1111)
+[SUCCESS] Auto-detected Epson Printer (PID: 1111)
+[       OK ] UsbSuite.USB_PowerCycleSimulator
+[ RUN      ] UsbSuite.USB_ExtremelySlowPrinter
+[SUCCESS] Auto-detected Epson Printer (PID: 1111)
+
+Executing universal Linux hardware state machine...
+[i] Saving hardware trace to ewr_trace.log for diagnostics.

@@ -45,3 +45,7 @@ Release
 .vscode/
 .idea/
 *.swp
+
+# AI agents temp files
+.gemini
+.agents

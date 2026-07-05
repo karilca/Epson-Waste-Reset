@@ -1,0 +1,7 @@
+EWR Hardware Trace Log (Linux)
+==================================================
+Target VID: 0x04B8 | PID: 0x1111
+Target Interface: 0 (Printer Class)
+Endpoint OUT: 0x1 | Endpoint IN: 0x81
+==================================================
+
