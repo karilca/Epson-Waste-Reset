@@ -389,7 +389,19 @@ namespace ewr {
             }
         }
 
+        // Fallback for Smart Protocol (e.g. L3256) where response does not echo the address.
+        // It starts at payload index 10 and contains command 0x41 followed directly by value.
+        for (size_t i = 10; i + 1 < responseData.size(); ++i)
+        {
+            if (responseData[i] == 0x41)
+            {
+                out_value = responseData[i+1];
+                return true;
+            }
+        }
+
         std::cerr << "[ERROR] ReadEEPROMAddress could not parse read response (response size: " << responseData.size() << ")" << std::endl;
+        std::cerr << "[ERROR] Response Hex:\n" << HexDump(responseData.data(), responseData.size()) << std::endl;
         return false;
     }
 }
