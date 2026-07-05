@@ -1,4 +1,5 @@
 #include "ewr/usb.h"
+#include "ewr/generator.h"
 #include <setupapi.h>
 #include <initguid.h>
 #include <iostream>
@@ -419,7 +420,7 @@ namespace ewr {
         return totalData;
     }
 
-    bool ExecutePayloadSequence(EwrDeviceHandle hPrinter, const std::vector<std::vector<unsigned char>>& sequence)
+    bool ExecutePayloadSequence(EwrDeviceHandle hPrinter, const std::vector<std::vector<unsigned char>>& sequence, const std::atomic<bool>* shutdown_requested, std::atomic<float>* progress)
     {
         std::cout << "\nExecuting universal Windows hardware state machine..." << std::endl;
         std::cout << "[i] Saving hardware trace to ewr_trace.log for diagnostics." << std::endl;
@@ -434,6 +435,13 @@ namespace ewr {
 
         for (size_t i = 0; i < sequence.size(); ++i)
         {
+            if (shutdown_requested && shutdown_requested->load())
+            {
+                std::cout << "[INFO] Reset sequence execution interrupted by user cancellation." << std::endl;
+                LogToTrace("[INFO] Execution interrupted by cancellation.");
+                break;
+            }
+
             LogToTrace("[OUT] Packet " + std::to_string(i + 1) + " (" + std::to_string(sequence[i].size()) + " bytes):");
             LogToTrace(HexDump(sequence[i].data(), sequence[i].size()));
 
@@ -460,6 +468,11 @@ namespace ewr {
             {
                 std::cout << "-> Packet " << i + 1 << " / " << sequence.size() << " | Sent. (No ACK)" << std::endl;
             }
+
+            if (progress)
+            {
+                *progress = 0.5f + 0.4f * (static_cast<float>(i + 1) / sequence.size());
+            }
         }
         
         LogToTrace("==================================================");
@@ -467,6 +480,11 @@ namespace ewr {
         LogToTrace("Total packets sent:          " + std::to_string(sequence.size()));
         LogToTrace("Packets triggering responses: " + std::to_string(ackCount));
         LogToTrace("==================================================\n");
+
+        if (shutdown_requested && shutdown_requested->load())
+        {
+            return false;
+        }
 
         if (ackCount == 0)
         {
@@ -479,5 +497,100 @@ namespace ewr {
         }
 
         return true;
+    }
+
+    bool IsEpsonPrinterConnected(uint16_t& out_pid)
+    {
+        GUID guid = { 0x28d78fad, 0x5a12, 0x11d1, { 0xae, 0x5b, 0x00, 0x00, 0xf8, 0x03, 0xa8, 0xc2 } };
+        HDEVINFO hDevInfo = SetupDiGetClassDevs(&guid, NULL, NULL, DIGCF_PRESENT | DIGCF_DEVICEINTERFACE);
+        if (hDevInfo == INVALID_HANDLE_VALUE)
+            return false;
+
+        SP_DEVICE_INTERFACE_DATA devInterfaceData;
+        devInterfaceData.cbSize = sizeof(SP_DEVICE_INTERFACE_DATA);
+
+        bool found = false;
+        for (DWORD i = 0; SetupDiEnumDeviceInterfaces(hDevInfo, NULL, &guid, i, &devInterfaceData); ++i)
+        {
+            DWORD requiredSize = 0;
+            SetupDiGetDeviceInterfaceDetail(hDevInfo, &devInterfaceData, NULL, 0, &requiredSize, NULL);
+            std::vector<BYTE> detailDataBuffer(requiredSize);
+            PSP_DEVICE_INTERFACE_DETAIL_DATA detailData = (PSP_DEVICE_INTERFACE_DETAIL_DATA)detailDataBuffer.data();
+            detailData->cbSize = sizeof(SP_DEVICE_INTERFACE_DETAIL_DATA);
+
+            if (SetupDiGetDeviceInterfaceDetail(hDevInfo, &devInterfaceData, detailData, requiredSize, NULL, NULL))
+            {
+                std::string devicePath = detailData->DevicePath;
+                std::string devicePathLower = devicePath;
+                std::transform(devicePathLower.begin(), devicePathLower.end(), devicePathLower.begin(), ::tolower);
+
+                if (devicePathLower.find("vid_04b8") != std::string::npos)
+                {
+                    size_t pidPos = devicePathLower.find("pid_");
+                    if (pidPos != std::string::npos && pidPos + 8 <= devicePathLower.length())
+                    {
+                        try {
+                            std::string pidHex = devicePathLower.substr(pidPos + 4, 4);
+                            out_pid = static_cast<uint16_t>(std::stoul(pidHex, nullptr, 16));
+                            found = true;
+                            break;
+                        } catch (...) {}
+                    }
+                }
+            }
+        }
+        SetupDiDestroyDeviceInfoList(hDevInfo);
+        return found;
+    }
+
+    bool ReadEEPROMAddress(EwrDeviceHandle hPrinter, uint16_t rkey, uint16_t address, uint8_t& out_value)
+    {
+        if (!hPrinter || hPrinter == INVALID_HANDLE_VALUE)
+            return false;
+
+        HANDLE winHandle = static_cast<HANDLE>(hPrinter);
+        UniversalGenerator gen;
+        std::vector<unsigned char> packet = gen.GenerateReadPacket(rkey, address);
+
+        if (!AsyncWrite(winHandle, packet))
+        {
+            LogToTrace("[ERROR] ReadEEPROMAddress: AsyncWrite failed.");
+            return false;
+        }
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+        std::vector<unsigned char> responseData = AsyncDrainBuffer(winHandle);
+        if (responseData.empty())
+        {
+            LogToTrace("[ERROR] ReadEEPROMAddress: No response received.");
+            return false;
+        }
+
+        uint8_t addr_low = address & 0xFF;
+        uint8_t addr_high = (address >> 8) & 0xFF;
+        for (size_t i = 0; i + 3 < responseData.size(); ++i)
+        {
+            if (responseData[i] == 0x41 && responseData[i+1] == addr_low && responseData[i+2] == addr_high)
+            {
+                out_value = responseData[i+3];
+                return true;
+            }
+        }
+
+        for (size_t i = 0; i + 2 < responseData.size(); ++i)
+        {
+            if (responseData[i] == addr_low && responseData[i+1] == addr_high)
+            {
+                if (i > 0 && i + 2 < responseData.size())
+                {
+                    out_value = responseData[i+2];
+                    return true;
+                }
+            }
+        }
+
+        LogToTrace("[ERROR] ReadEEPROMAddress: Could not parse response.");
+        return false;
     }
 }

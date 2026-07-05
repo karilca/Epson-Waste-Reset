@@ -135,6 +135,10 @@ void Dummy(const ImVec2& size) {}
 void PushStyleColor(ImGuiCol idx, const ImVec4& col) {}
 void PopStyleColor(int count) {}
 
+void SetColumnWidth(int column_index, float width) {}
+void PushItemWidth(float item_width) {}
+void PopItemWidth() {}
+
 static ImGuiViewport g_viewport;
 
 const ImGuiViewport* GetMainViewport() {
@@ -149,6 +153,22 @@ void PushStyleVar(ImGuiStyleVar idx, const ImVec2& val) {}
 void PopStyleVar(int count) {}
 
 void SetScrollHereY(float center_y_ratio) {}
+
+bool BeginChild(const char* str_id, const ImVec2& size, bool border, ImGuiWindowFlags flags) {
+    return true;
+}
+void EndChild() {}
+void Columns(int count, const char* id, bool border) {}
+void NextColumn() {}
+bool InputTextWithHint(const char* label, const char* hint, char* buf, size_t buf_size, ImGuiInputTextFlags flags, void* callback, void* user_data) {
+    return InputText(label, buf, buf_size, flags, callback, user_data);
+}
+void Spacing() {}
+double GetTime() {
+    static double startTime = 0.0;
+    startTime += 0.1;
+    return startTime;
+}
 
 void Render() {}
 void* GetDrawData() { return nullptr; }

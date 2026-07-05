@@ -707,3 +707,65 @@ TEST(GuiSuite, Memory_Leak_ValgrindRun) {
     }
     EXPECT_TRUE(true);
 }
+
+TEST(GuiSuite, EEPROM_Read_Success) {
+    MockNetworkState::Get().SetScenario(NetworkScenario::SUCCESS);
+    MockUsbState::Get().SetScenario(UsbScenario::SUCCESS);
+    
+    ewr::EwrGuiApp app;
+    app.Initialize();
+    app.SelectModel("L3150");
+    
+    app.TriggerReadCounters();
+    EXPECT_TRUE(app.IsReadRunning());
+    
+    WaitFor([&](){ return !app.IsReadRunning(); });
+    
+    EXPECT_FALSE(app.IsReadRunning());
+    EXPECT_TRUE(app.IsReadSuccess());
+    auto values = app.GetReadValues();
+    EXPECT_FALSE(values.empty());
+    EXPECT_EQ(values[0], 100);
+    EXPECT_EQ(app.GetReadStatusText(), "Success");
+}
+
+TEST(GuiSuite, EEPROM_Read_NoDevice) {
+    MockNetworkState::Get().SetScenario(NetworkScenario::SUCCESS);
+    MockUsbState::Get().SetScenario(UsbScenario::NO_DEVICE);
+    
+    ewr::EwrGuiApp app;
+    app.Initialize();
+    app.SelectModel("L3150");
+    
+    app.TriggerReadCounters();
+    
+    WaitFor([&](){ return !app.IsReadRunning(); });
+    
+    EXPECT_FALSE(app.IsReadRunning());
+    EXPECT_FALSE(app.IsReadSuccess());
+    EXPECT_TRUE(app.GetReadStatusText().find("Error") != std::string::npos);
+}
+
+TEST(GuiSuite, Connection_PeriodicScanning) {
+    MockNetworkState::Get().SetScenario(NetworkScenario::SUCCESS);
+    MockUsbState::Get().SetScenario(UsbScenario::SUCCESS);
+    
+    ewr::EwrGuiApp app;
+    app.Initialize();
+    
+    // Initial scan on Initialize should have detected it
+    EXPECT_TRUE(app.IsPrinterConnected());
+    EXPECT_EQ(app.GetConnectedPrinterPid(), 0x1111);
+    
+    // Change to disconnected
+    MockUsbState::Get().SetScenario(UsbScenario::NO_DEVICE);
+    
+    // We mock time to trigger the 2.0s scan check
+    // In our mock imgui double GetTime() increment by 0.1 on each call
+    // Let's call RenderUI multiple times to simulate time passing (> 2.0 seconds)
+    for (int i = 0; i < 25; ++i) {
+        app.RenderUI();
+    }
+    
+    EXPECT_FALSE(app.IsPrinterConnected());
+}

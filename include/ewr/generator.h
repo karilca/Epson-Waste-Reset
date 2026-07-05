@@ -31,6 +31,7 @@ namespace ewr {
         bool IsEmpty() const;
         std::vector<DbPrinterModel> GetAvailableModels() const;
         std::vector<std::vector<unsigned char>> GenerateSequence(const DbPrinterModel& model) const;
+        std::vector<unsigned char> GenerateReadPacket(uint16_t rkey, uint16_t address) const;
     private:
         std::vector<unsigned char> GenerateWritePacket(uint16_t rkey, uint16_t address, uint8_t value, const std::string& wkey) const;
     private:

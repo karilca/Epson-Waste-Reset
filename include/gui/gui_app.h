@@ -64,6 +64,14 @@ public:
     bool IsOtaSyncRunning() const;
     void ClearLogs();
 
+    bool IsPrinterConnected() const;
+    uint16_t GetConnectedPrinterPid() const;
+    void TriggerReadCounters();
+    bool IsReadRunning() const;
+    bool IsReadSuccess() const;
+    std::vector<uint8_t> GetReadValues() const;
+    std::string GetReadStatusText() const;
+
 private:
     void RunOtaSyncThread();
     void RunResetThread();
@@ -94,6 +102,21 @@ private:
 
     std::thread ota_thread_;
     std::thread reset_thread_;
+    std::thread read_thread_;
+
+    // Live connection scan
+    bool is_printer_connected_;
+    uint16_t connected_printer_pid_;
+    double last_scan_time_;
+
+    // Counter reading states
+    std::atomic<bool> read_running_;
+    std::atomic<bool> read_success_;
+    std::vector<uint8_t> read_values_;
+    std::string read_status_text_;
+
+    void RunReadThread();
+    void ApplyPremiumTheme();
 
     mutable std::mutex data_mutex_;
     LogBuffer log_buffer_;

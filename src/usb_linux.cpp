@@ -1,4 +1,5 @@
 #include "ewr/usb.h"
+#include "ewr/generator.h"
 #include <libusb-1.0/libusb.h>
 #include <iostream>
 #include <fstream>
@@ -194,7 +195,7 @@ namespace ewr {
         libusb_exit(nullptr);
     }
 
-    bool ExecutePayloadSequence(EwrDeviceHandle hPrinter, const std::vector<std::vector<unsigned char>>& sequence)
+    bool ExecutePayloadSequence(EwrDeviceHandle hPrinter, const std::vector<std::vector<unsigned char>>& sequence, const std::atomic<bool>* shutdown_requested, std::atomic<float>* progress)
     {
         std::cout << "\nExecuting universal Linux hardware state machine..." << std::endl;
         std::cout << "[i] Saving hardware trace to ewr_trace.log for diagnostics." << std::endl;
@@ -208,6 +209,14 @@ namespace ewr {
 
         for (size_t i = 0; i < sequence.size(); ++i) 
         {
+            if (shutdown_requested && shutdown_requested->load())
+            {
+                std::cout << "[INFO] Reset sequence execution interrupted by user cancellation." << std::endl;
+                if (logFile.is_open())
+                    logFile << "[INFO] Execution interrupted by cancellation.\n\n";
+                break;
+            }
+
             if (logFile.is_open()) 
             {
                 logFile << "[OUT] Packet " << i + 1 << " (" << sequence[i].size() << " bytes):\n";
@@ -260,10 +269,20 @@ namespace ewr {
             {
                 std::cout << "-> Packet " << i + 1 << " / " << sequence.size() << " | Sent. (No ACK)" << std::endl;
             }
+
+            if (progress)
+            {
+                *progress = 0.5f + 0.4f * (static_cast<float>(i + 1) / sequence.size());
+            }
         }
         
         if (logFile.is_open())
             logFile.close();
+
+        if (shutdown_requested && shutdown_requested->load())
+        {
+            return false;
+        }
 
         if (ackCount == 0)
         {
@@ -276,5 +295,101 @@ namespace ewr {
         }
 
         return true;
+    }
+
+    bool IsEpsonPrinterConnected(uint16_t& out_pid)
+    {
+        if (libusb_init(nullptr) < 0)
+            return false;
+
+        libusb_device** devs;
+        ssize_t cnt = libusb_get_device_list(nullptr, &devs);
+        if (cnt < 0)
+            return false;
+
+        bool found = false;
+        for (ssize_t i = 0; i < cnt; i++)
+        {
+            libusb_device_descriptor desc;
+            if (libusb_get_device_descriptor(devs[i], &desc) < 0)
+                continue;
+
+            if (desc.idVendor == 0x04b8) // Epson VID
+            {
+                out_pid = desc.idProduct;
+                found = true;
+                break;
+            }
+        }
+
+        libusb_free_device_list(devs, 1);
+        libusb_exit(nullptr);
+        return found;
+    }
+
+    bool ReadEEPROMAddress(EwrDeviceHandle hPrinter, uint16_t rkey, uint16_t address, uint8_t& out_value)
+    {
+        if (!hPrinter)
+            return false;
+
+        libusb_device_handle* handle = static_cast<libusb_device_handle*>(hPrinter);
+        UniversalGenerator gen;
+        std::vector<unsigned char> packet = gen.GenerateReadPacket(rkey, address);
+
+        int actual_length;
+        int write_status = libusb_bulk_transfer(handle, EP_OUT, packet.data(), packet.size(), &actual_length, 2000);
+        if (write_status != 0)
+        {
+            std::cerr << "[ERROR] ReadEEPROMAddress failed to write read request packet (libusb error: " << write_status << ")" << std::endl;
+            return false;
+        }
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+        unsigned char readBuffer[256];
+        std::vector<unsigned char> responseData;
+        while (true)
+        {
+            int read_status = libusb_bulk_transfer(handle, EP_IN, readBuffer, sizeof(readBuffer), &actual_length, 250);
+            if (read_status == LIBUSB_ERROR_TIMEOUT || actual_length == 0)
+                break;
+
+            if (read_status == 0)
+                responseData.insert(responseData.end(), readBuffer, readBuffer + actual_length);
+            else
+                break;
+        }
+
+        if (responseData.empty())
+        {
+            std::cerr << "[ERROR] ReadEEPROMAddress received no response from printer." << std::endl;
+            return false;
+        }
+
+        uint8_t addr_low = address & 0xFF;
+        uint8_t addr_high = (address >> 8) & 0xFF;
+        for (size_t i = 0; i + 3 < responseData.size(); ++i)
+        {
+            if (responseData[i] == 0x41 && responseData[i+1] == addr_low && responseData[i+2] == addr_high)
+            {
+                out_value = responseData[i+3];
+                return true;
+            }
+        }
+
+        for (size_t i = 0; i + 2 < responseData.size(); ++i)
+        {
+            if (responseData[i] == addr_low && responseData[i+1] == addr_high)
+            {
+                if (i > 0 && i + 2 < responseData.size())
+                {
+                    out_value = responseData[i+2];
+                    return true;
+                }
+            }
+        }
+
+        std::cerr << "[ERROR] ReadEEPROMAddress could not parse read response (response size: " << responseData.size() << ")" << std::endl;
+        return false;
     }
 }

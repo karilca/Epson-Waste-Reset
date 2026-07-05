@@ -52,6 +52,37 @@ BOOL WINAPI MockReadFile(HANDLE hFile, LPVOID lpBuffer, DWORD nNumberOfBytesToRe
             if (lpNumberOfBytesRead) *lpNumberOfBytesRead = 0;
             return FALSE;
         }
+        if (nNumberOfBytesToRead >= 16) {
+            const auto& packets = MockUsbState::Get().GetWritePackets();
+            if (!packets.empty()) {
+                const auto& last = packets.back();
+                if (last.size() >= 17 && last[12] == 0x41) { // Read command
+                    unsigned char* bytes = static_cast<unsigned char*>(lpBuffer);
+                    bytes[0] = 0x02;
+                    bytes[1] = 0x02;
+                    bytes[2] = 0x00;
+                    bytes[3] = 0x10; // length 16
+                    bytes[4] = 0x00;
+                    bytes[5] = 0x00;
+                    bytes[6] = 0x7C;
+                    bytes[7] = 0x7C;
+                    bytes[8] = 0x06; // inner len
+                    bytes[9] = 0x00;
+                    bytes[10] = last[10]; // rkey low
+                    bytes[11] = last[11]; // rkey high
+                    bytes[12] = 0x41; // command
+                    bytes[13] = last[15]; // addr low
+                    bytes[14] = last[16]; // addr high
+                    bytes[15] = 100; // Mock value read
+                    if (lpNumberOfBytesRead) *lpNumberOfBytesRead = 16;
+                    if (lpOverlapped && lpOverlapped->hEvent) {
+                        SetEvent(lpOverlapped->hEvent);
+                    }
+                    MockUsbState::Get().ConsumeAck();
+                    return TRUE;
+                }
+            }
+        }
         if (nNumberOfBytesToRead >= 6) {
             if (MockUsbState::Get().ConsumeAck()) {
                 unsigned char* bytes = static_cast<unsigned char*>(lpBuffer);

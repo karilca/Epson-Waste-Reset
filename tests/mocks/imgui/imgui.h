@@ -46,7 +46,16 @@ struct ImGuiIO {
 };
 
 struct ImGuiStyle {
-    ImVec4 Colors[60];
+    ImVec4 Colors[80];
+    float WindowRounding;
+    float FrameRounding;
+    float PopupRounding;
+    float ScrollbarRounding;
+    float GrabRounding;
+    float TabRounding;
+    ImVec2 FramePadding;
+    ImVec2 ItemSpacing;
+    float WindowBorderSize;
 };
 
 enum ImGuiWindowFlags_ {
@@ -56,15 +65,16 @@ enum ImGuiWindowFlags_ {
     ImGuiWindowFlags_NoMove = 1 << 2,
     ImGuiWindowFlags_NoCollapse = 1 << 5,
     ImGuiWindowFlags_NoBringToFrontOnFocus = 1 << 13,
-    ImGuiWindowFlags_NoNavFocus = 1 << 15
+    ImGuiWindowFlags_NoNavFocus = 1 << 15,
+    ImGuiWindowFlags_NoScrollbar = 1 << 16
 };
 
 enum ImGuiStyleVar_ {
     ImGuiStyleVar_WindowRounding,
     ImGuiStyleVar_WindowBorderSize,
-    ImGuiStyleVar_WindowPadding
+    ImGuiStyleVar_WindowPadding,
+    ImGuiStyleVar_ChildRounding
 };
-
 
 struct MockWidget {
     std::string type; // "Text", "Button", "InputText", "Selectable", "ProgressBar", "Window"
@@ -75,9 +85,33 @@ struct MockWidget {
 
 typedef int ImGuiCol;
 enum ImGuiCol_ {
-    ImGuiCol_Button = 0,
-    ImGuiCol_ButtonHovered = 1,
-    ImGuiCol_ButtonActive = 2
+    ImGuiCol_Text,
+    ImGuiCol_TextDisabled,
+    ImGuiCol_WindowBg,
+    ImGuiCol_ChildBg,
+    ImGuiCol_PopupBg,
+    ImGuiCol_Border,
+    ImGuiCol_BorderShadow,
+    ImGuiCol_FrameBg,
+    ImGuiCol_FrameBgHovered,
+    ImGuiCol_FrameBgActive,
+    ImGuiCol_TitleBg,
+    ImGuiCol_TitleBgActive,
+    ImGuiCol_TitleBgCollapsed,
+    ImGuiCol_MenuBarBg,
+    ImGuiCol_ScrollbarBg,
+    ImGuiCol_ScrollbarGrab,
+    ImGuiCol_ScrollbarGrabHovered,
+    ImGuiCol_ScrollbarGrabActive,
+    ImGuiCol_CheckMark,
+    ImGuiCol_SliderGrab,
+    ImGuiCol_SliderGrabActive,
+    ImGuiCol_Button,
+    ImGuiCol_ButtonHovered,
+    ImGuiCol_ButtonActive,
+    ImGuiCol_Header,
+    ImGuiCol_HeaderHovered,
+    ImGuiCol_HeaderActive
 };
 
 // Simulation State Controller
@@ -207,6 +241,10 @@ namespace ImGui {
     void PushStyleColor(ImGuiCol idx, const ImVec4& col);
     void PopStyleColor(int count = 1);
     
+    void SetColumnWidth(int column_index, float width);
+    void PushItemWidth(float item_width);
+    void PopItemWidth();
+    
     const ImGuiViewport* GetMainViewport();
     void SetNextWindowPos(const ImVec2& pos, int cond = 0, const ImVec2& pivot = ImVec2(0,0));
     void SetNextWindowSize(const ImVec2& size, int cond = 0);
@@ -218,6 +256,14 @@ namespace ImGui {
     
     void SetScrollHereY(float center_y_ratio = 0.5f);
     
+    bool BeginChild(const char* str_id, const ImVec2& size = ImVec2(0,0), bool border = false, ImGuiWindowFlags flags = 0);
+    void EndChild();
+    void Columns(int count = 1, const char* id = nullptr, bool border = true);
+    void NextColumn();
+    bool InputTextWithHint(const char* label, const char* hint, char* buf, size_t buf_size, ImGuiInputTextFlags flags = 0, void* callback = nullptr, void* user_data = nullptr);
+    void Spacing();
+    double GetTime();
+
     void Render();
     void* GetDrawData();
     void NewFrame();

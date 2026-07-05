@@ -137,6 +137,43 @@ namespace ewr {
         return d4;
     }
 
+    std::vector<unsigned char> UniversalGenerator::GenerateReadPacket(uint16_t rkey, uint16_t address) const
+    {
+        uint8_t c = 0x41; // '|A' command
+        uint8_t not_c = ~c & 0xFF;
+        uint8_t shift_c = ((c >> 1) & 0x7F) | ((c << 7) & 0x80);
+
+        std::vector<unsigned char> inner;
+        inner.push_back(rkey & 0xFF);         // rkey Low
+        inner.push_back((rkey >> 8) & 0xFF);  // rkey High
+        inner.push_back(c);
+        inner.push_back(not_c);
+        inner.push_back(shift_c);
+        inner.push_back(address & 0xFF);      // addr Low
+        inner.push_back((address >> 8) & 0xFF); // addr High
+
+        std::vector<unsigned char> epson_cmd;
+        epson_cmd.push_back(0x7C); // '|'
+        epson_cmd.push_back(0x7C); // '|'
+        uint16_t len = inner.size();
+        epson_cmd.push_back(len & 0xFF);      // inner_len Low
+        epson_cmd.push_back((len >> 8) & 0xFF); // inner_len High
+        epson_cmd.insert(epson_cmd.end(), inner.begin(), inner.end());
+
+        // Wrap in IEEE 1284.4 D4 Header (EPSON-CTRL: 0x02, 0x02)
+        std::vector<unsigned char> d4;
+        d4.push_back(0x02); // psid
+        d4.push_back(0x02); // ssid
+        uint16_t d4_len = epson_cmd.size() + 6;
+        d4.push_back((d4_len >> 8) & 0xFF);
+        d4.push_back(d4_len & 0xFF);
+        d4.push_back(0x00); // credit: MUST be 0 here to prevent overflow
+        d4.push_back(0x00); // control
+        d4.insert(d4.end(), epson_cmd.begin(), epson_cmd.end());
+
+        return d4;
+    }
+
     std::vector<std::vector<unsigned char>> UniversalGenerator::GenerateSequence(const DbPrinterModel& model) const
     {
         std::vector<std::vector<unsigned char>> sequence;

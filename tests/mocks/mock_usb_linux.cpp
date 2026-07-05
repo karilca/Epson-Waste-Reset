@@ -144,6 +144,33 @@ int libusb_bulk_transfer(libusb_device_handle* handle, unsigned char endpoint, u
             *transferred = 0;
             return LIBUSB_ERROR_TIMEOUT;
         }
+        if (length >= 16) {
+            const auto& packets = MockUsbState::Get().GetWritePackets();
+            if (!packets.empty()) {
+                const auto& last = packets.back();
+                if (last.size() >= 17 && last[12] == 0x41) { // Read command
+                    data[0] = 0x02;
+                    data[1] = 0x02;
+                    data[2] = 0x00;
+                    data[3] = 0x10; // length 16
+                    data[4] = 0x00;
+                    data[5] = 0x00;
+                    data[6] = 0x7C;
+                    data[7] = 0x7C;
+                    data[8] = 0x06; // inner len
+                    data[9] = 0x00;
+                    data[10] = last[10]; // rkey low
+                    data[11] = last[11]; // rkey high
+                    data[12] = 0x41; // command
+                    data[13] = last[15]; // addr low
+                    data[14] = last[16]; // addr high
+                    data[15] = 100; // Mock value read
+                    *transferred = 16;
+                    MockUsbState::Get().ConsumeAck();
+                    return 0;
+                }
+            }
+        }
         if (length >= 6) {
             if (MockUsbState::Get().ConsumeAck()) {
                 data[0] = 0x02;

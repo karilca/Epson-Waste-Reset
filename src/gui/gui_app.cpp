@@ -95,7 +95,13 @@ EwrGuiApp::EwrGuiApp() :
     reset_success_(false),
     reset_progress_(0.0f),
     reset_status_text_("Idle"),
-    shutdown_requested_(false)
+    shutdown_requested_(false),
+    is_printer_connected_(false),
+    connected_printer_pid_(0),
+    last_scan_time_(0.0),
+    read_running_(false),
+    read_success_(false),
+    read_status_text_("Idle")
 {
     log_buffer_.RegisterCapture();
 }
@@ -112,6 +118,9 @@ void EwrGuiApp::Shutdown() {
     }
     if (reset_thread_.joinable()) {
         reset_thread_.join();
+    }
+    if (read_thread_.joinable()) {
+        read_thread_.join();
     }
 }
 
@@ -140,7 +149,11 @@ bool EwrGuiApp::CheckAdminPrivileges() const {
 
 void EwrGuiApp::Initialize() {
     has_admin_privileges_ = CheckAdminPrivileges();
-    
+    ApplyPremiumTheme();
+
+    // Check if printer is connected on startup
+    is_printer_connected_ = IsEpsonPrinterConnected(connected_printer_pid_);
+
     // Load local database immediately if exists as fallback
     std::cout << "[INFO] Loading local cached database..." << std::endl;
     generator_.LoadDatabase("database.json");
@@ -209,6 +222,13 @@ void EwrGuiApp::RenderUI() {
     // Apply styling (Dark Theme)
     ImGui::StyleColorsDark();
     
+    // Periodic printer connection scan (every 2 seconds)
+    double now = ImGui::GetTime();
+    if (now - last_scan_time_ > 2.0) {
+        is_printer_connected_ = IsEpsonPrinterConnected(connected_printer_pid_);
+        last_scan_time_ = now;
+    }
+
     // Make the ImGui window cover the entire GLFW window viewport (making it feel native)
     const ImGuiViewport* viewport = ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(viewport->WorkPos);
@@ -230,22 +250,72 @@ void EwrGuiApp::RenderUI() {
     
     // F6: Administrative Privilege Warning Banner
     if (!has_admin_privileges_) {
-        ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "WARNING: Administrative privileges are required! Please run the application with root/administrator privileges.");
-        ImGui::Separator();
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.35f, 0.10f, 0.10f, 1.00f));
+        ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 4.0f);
+        ImGui::BeginChild("AdminWarning", ImVec2(0, 32), true, ImGuiWindowFlags_NoScrollbar);
+        ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.8f, 1.0f), "WARNING: Administrative privileges are required! Please run the application with root/administrator privileges.");
+        ImGui::EndChild();
+        ImGui::PopStyleVar();
+        ImGui::PopStyleColor();
+        ImGui::Spacing();
     }
     
-    // Header section: version, sync status
-    ImGui::Text("Version: 1.1.0");
+    // Header section: version, sync status, connection status
+    ImGui::Text("EWR Utility v1.1.0");
     ImGui::SameLine();
-    ImGui::Text("| DB Sync: %s", ota_status_text_.c_str());
+    ImGui::Text("|");
+    ImGui::SameLine();
+
+    // Connection status indicator
+    if (is_printer_connected_) {
+        ImGui::TextColored(ImVec4(0.3f, 0.9f, 0.3f, 1.0f), "●");
+        ImGui::SameLine();
+        ImGui::Text("Printer: Connected (PID: %04X)", connected_printer_pid_);
+    } else {
+        ImGui::TextColored(ImVec4(0.9f, 0.3f, 0.3f, 1.0f), "●");
+        ImGui::SameLine();
+        ImGui::Text("Printer: Disconnected");
+    }
+    ImGui::SameLine();
+    ImGui::Text("|");
+    ImGui::SameLine();
+
+    // OTA sync status indicator
+    if (ota_status_text_ == "Synced") {
+        ImGui::TextColored(ImVec4(0.3f, 0.9f, 0.3f, 1.0f), "●");
+    } else if (ota_status_text_ == "Syncing...") {
+        ImGui::TextColored(ImVec4(0.9f, 0.9f, 0.3f, 1.0f), "●");
+    } else {
+        ImGui::TextColored(ImVec4(0.9f, 0.3f, 0.3f, 1.0f), "●");
+    }
+    ImGui::SameLine();
+    ImGui::Text("DB Sync: %s", ota_status_text_.c_str());
+    
     ImGui::Separator();
+    ImGui::Spacing();
+
+    // Split Layout
+    ImGui::Columns(2, "MainLayout", false);
+    
+    // Set left column width to 40% of the viewport width
+    ImGui::SetColumnWidth(0, viewport->WorkSize.x * 0.38f);
+
+    // ==========================================
+    // LEFT COLUMN: Pretraga i popis modela
+    // ==========================================
+    ImGui::Text("Model Selection");
+    ImGui::Spacing();
     
     // F2: Real-time search
     char buf[256];
     std::strncpy(buf, search_query_.c_str(), sizeof(buf));
-    if (ImGui::InputText("Search Models", buf, sizeof(buf))) {
+    ImGui::PushItemWidth(-1.0f); // Fill column width
+    if (ImGui::InputTextWithHint("##SearchModels", "Search printer models...", buf, sizeof(buf))) {
         search_query_ = buf;
     }
+    ImGui::PopItemWidth();
+    
+    ImGui::Spacing();
     
     // Perform search filtering
     std::string query = Trim(search_query_);
@@ -268,12 +338,11 @@ void EwrGuiApp::RenderUI() {
     }
     
     // Available Models ListBox
-    ImGui::Text("Available Models:");
-    if (ImGui::BeginListBox("##ModelsList", ImVec2(-1.0f, 150.0f))) {
+    ImGui::Text("Available Models (%zu matches):", matches.size());
+    if (ImGui::BeginListBox("##ModelsList", ImVec2(-1.0f, 270.0f))) {
         if (matches.empty()) {
             ImGui::Text("No results found");
         } else {
-            // Sort match names alphabetically
             std::sort(matches.begin(), matches.end());
             for (const auto& name : matches) {
                 bool is_selected = (name == selected_model_name_);
@@ -285,55 +354,113 @@ void EwrGuiApp::RenderUI() {
         ImGui::EndListBox();
     }
     
-    ImGui::Separator();
+    // ==========================================
+    // RIGHT COLUMN: Detalji, reset, read
+    // ==========================================
+    ImGui::NextColumn();
     
-    // F3: Model Selection & Details Panel
-    ImGui::Text("Model Details:");
-    if (selected_model_name_.empty()) {
-        ImGui::Text("Please select a printer model from the list.");
-    } else {
-        bool is_smart = false;
-        DbPrinterModel smart_info;
-        PrinterModel custom_info;
-        
-        {
-            std::lock_guard<std::mutex> lock(data_mutex_);
-            for (const auto& m : smart_models_) {
+    ImGui::Text("Model Details");
+    ImGui::Spacing();
+    
+    DbPrinterModel selected_smart_model;
+    bool selected_is_smart = false;
+    PrinterModel selected_custom_model;
+    
+    {
+        std::lock_guard<std::mutex> lock(data_mutex_);
+        for (const auto& m : smart_models_) {
+            if (m.name == selected_model_name_) {
+                selected_smart_model = m;
+                selected_is_smart = true;
+                break;
+            }
+        }
+        if (!selected_is_smart) {
+            for (const auto& m : custom_models_) {
                 if (m.name == selected_model_name_) {
-                    is_smart = true;
-                    smart_info = m;
+                    selected_custom_model = m;
                     break;
                 }
             }
-            if (!is_smart) {
-                for (const auto& m : custom_models_) {
-                    if (m.name == selected_model_name_) {
-                        custom_info = m;
-                        break;
-                    }
-                }
-            }
         }
-        
-        if (is_smart) {
+    }
+
+    ImGui::BeginChild("DetailsContainer", ImVec2(-1.0f, 110.0f), true);
+    if (selected_model_name_.empty()) {
+        ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "Please select a printer model from the list.");
+    } else {
+        ImGui::Text("Selected Model: %s", selected_model_name_.c_str());
+        if (selected_is_smart) {
             ImGui::Text("Type: Smart Protocol");
-            ImGui::Text("Read Key: %u", smart_info.rkey);
-            ImGui::Text("Write Key: %s", smart_info.wkey.c_str());
-            ImGui::Text("Reset Addresses: %zu", smart_info.addresses.size());
+            ImGui::Text("Read Key: %u", selected_smart_model.rkey);
+            ImGui::Text("Write Key: %s", selected_smart_model.wkey.c_str());
+            ImGui::Text("Reset Target Addresses: %zu", selected_smart_model.addresses.size());
         } else {
             ImGui::Text("Type: Replay Model");
-            ImGui::Text("File Path: %s", custom_info.filepath.c_str());
+            ImGui::Text("Wireshark Dump: %s", selected_custom_model.filepath.c_str());
+        }
+    }
+    ImGui::EndChild();
+    
+    ImGui::Spacing();
+    
+    // Diagnostics (Counter Reading)
+    ImGui::Text("Counter Diagnostics");
+    ImGui::Spacing();
+    ImGui::BeginChild("DiagnosticsContainer", ImVec2(-1.0f, 95.0f), true);
+    
+    bool can_read = selected_is_smart && !read_running_ && !reset_running_ && !selected_model_name_.empty();
+    if (!can_read) {
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.2f, 0.2f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
+        ImGui::Button("Read Waste Pad Counter");
+        ImGui::PopStyleColor(2);
+    } else {
+        if (ImGui::Button("Read Waste Pad Counter")) {
+            TriggerReadCounters();
         }
     }
     
-    ImGui::Separator();
+    ImGui::SameLine();
+    if (read_running_) {
+        ImGui::TextColored(ImVec4(0.9f, 0.9f, 0.3f, 1.0f), "Reading EEPROM...");
+    } else if (read_status_text_ != "Idle") {
+        if (read_success_) {
+            ImGui::TextColored(ImVec4(0.3f, 0.9f, 0.3f, 1.0f), "Read Success!");
+        } else {
+            ImGui::TextColored(ImVec4(0.9f, 0.3f, 0.3f, 1.0f), "Read Failed: %s", read_status_text_.c_str());
+        }
+    } else {
+        ImGui::Text("Status: Idle");
+    }
     
-    // F4: Action panel (Reset execution & responsiveness)
-    bool can_reset = !selected_model_name_.empty() && !reset_running_;
+    if (read_success_ && !read_values_.empty()) {
+        ImGui::Spacing();
+        if (read_values_.size() == 1 && selected_smart_model.addresses.size() >= 1) {
+            ImGui::TextColored(ImVec4(0.3f, 0.9f, 0.3f, 1.0f), "Counter Value (Address %u): %u", selected_smart_model.addresses[0], read_values_[0]);
+        } else if (read_values_.size() >= 2 && selected_smart_model.addresses.size() >= 2) {
+            uint16_t combined = read_values_[0] | (read_values_[1] << 8);
+            ImGui::TextColored(ImVec4(0.3f, 0.9f, 0.3f, 1.0f), "Counters: Address %u = %u, Address %u = %u", 
+                               selected_smart_model.addresses[0], read_values_[0],
+                               selected_smart_model.addresses[1], read_values_[1]);
+            ImGui::TextColored(ImVec4(0.3f, 0.9f, 0.3f, 1.0f), "Combined Value: %u", combined);
+        }
+    }
+    ImGui::EndChild();
+    
+    ImGui::Spacing();
+    
+    // Action panel
+    ImGui::Text("Maintenance Actions");
+    ImGui::Spacing();
+    ImGui::BeginChild("ResetContainer", ImVec2(-1.0f, 95.0f), true);
+    
+    bool can_reset = !selected_model_name_.empty() && !reset_running_ && !read_running_;
     if (!can_reset) {
-        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.3f, 0.3f, 0.3f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.2f, 0.2f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
         ImGui::Button("Reset Waste Ink Pad");
-        ImGui::PopStyleColor();
+        ImGui::PopStyleColor(2);
     } else {
         if (ImGui::Button("Reset Waste Ink Pad")) {
             TriggerReset();
@@ -348,21 +475,47 @@ void EwrGuiApp::RenderUI() {
         ImGui::Text("Status: %s", reset_status_text_.c_str());
         ImGui::ProgressBar(reset_progress_);
     } else if (reset_status_text_ != "Idle") {
-        ImGui::Text("Status: %s", reset_status_text_.c_str());
+        if (reset_success_) {
+            ImGui::TextColored(ImVec4(0.3f, 0.9f, 0.3f, 1.0f), "Status: %s", reset_status_text_.c_str());
+            ImGui::TextColored(ImVec4(0.3f, 0.9f, 0.3f, 1.0f), "Please turn the printer OFF and ON using the physical power button.");
+        } else {
+            ImGui::TextColored(ImVec4(0.9f, 0.3f, 0.3f, 1.0f), "Status: %s", reset_status_text_.c_str());
+        }
+    } else {
+        ImGui::Text("Status: Idle");
     }
+    ImGui::EndChild();
+    
+    // Restore layout columns
+    ImGui::Columns(1);
     
     ImGui::Separator();
+    ImGui::Spacing();
     
     // F7: Log Console Output
-    ImGui::Text("Log Console:");
+    ImGui::Text("Log Console Output");
     ImGui::SameLine();
     if (ImGui::Button("Clear Logs")) {
         ClearLogs();
     }
     
     std::string logs = log_buffer_.GetLogs();
-    if (ImGui::BeginListBox("##LogsList", ImVec2(-1.0f, 200.0f))) {
-        ImGui::TextUnformatted(logs.c_str());
+    if (ImGui::BeginListBox("##LogsList", ImVec2(-1.0f, 120.0f))) {
+        std::stringstream ss(logs);
+        std::string line;
+        while (std::getline(ss, line)) {
+            ImVec4 col = ImVec4(0.92f, 0.92f, 0.95f, 1.00f); // default white/grey
+            if (line.rfind("[ERROR]", 0) == 0 || line.rfind("[!]", 0) == 0) {
+                col = ImVec4(0.9f, 0.3f, 0.3f, 1.00f); // Red
+            } else if (line.rfind("[WARNING]", 0) == 0) {
+                col = ImVec4(0.9f, 0.6f, 0.2f, 1.00f); // Orange
+            } else if (line.rfind("[SUCCESS]", 0) == 0) {
+                col = ImVec4(0.3f, 0.9f, 0.3f, 1.00f); // Green
+            } else if (line.rfind("[INFO]", 0) == 0) {
+                col = ImVec4(0.3f, 0.7f, 0.9f, 1.00f); // Cyan
+            }
+            ImGui::TextColored(col, "%s", line.c_str());
+        }
         ImGui::SetScrollHereY(1.0f);
         ImGui::EndListBox();
     }
@@ -461,20 +614,8 @@ void EwrGuiApp::RunResetThread() {
     reset_progress_ = 0.5f;
     reset_status_text_ = "Executing sequence...";
     
-    // Execute sequence and update progress linearly
     bool execute_success = true;
-    size_t total_packets = sequence.size();
-    
-    // If running in tests, or if we want fine-grained linear progress updates,
-    // we can send packets step by step or call the single block.
-    // To support Cancellation midway through packets, sending step-by-step is ideal!
-    // Since ExecutePayloadSequence in usb_linux.cpp doesn't support cancellation,
-    // we can either call it, or run our own loop here.
-    // Wait, the prompt says "Utilize the existing codebase routines: ewr::ExecutePayloadSequence".
-    // If we call it directly, we can do:
-    reset_progress_ = 0.7f;
-    execute_success = ExecutePayloadSequence(hPrinter, sequence);
-    reset_progress_ = 0.9f;
+    execute_success = ExecutePayloadSequence(hPrinter, sequence, &shutdown_requested_, &reset_progress_);
     
     DisconnectPrinter(hPrinter);
     
@@ -577,6 +718,157 @@ bool EwrGuiApp::IsOtaSyncRunning() const {
 
 void EwrGuiApp::ClearLogs() {
     log_buffer_.Clear();
+}
+
+bool EwrGuiApp::IsPrinterConnected() const {
+    std::lock_guard<std::mutex> lock(data_mutex_);
+    return is_printer_connected_;
+}
+
+uint16_t EwrGuiApp::GetConnectedPrinterPid() const {
+    std::lock_guard<std::mutex> lock(data_mutex_);
+    return connected_printer_pid_;
+}
+
+bool EwrGuiApp::IsReadRunning() const {
+    return read_running_;
+}
+
+bool EwrGuiApp::IsReadSuccess() const {
+    return read_success_;
+}
+
+std::vector<uint8_t> EwrGuiApp::GetReadValues() const {
+    std::lock_guard<std::mutex> lock(data_mutex_);
+    return read_values_;
+}
+
+std::string EwrGuiApp::GetReadStatusText() const {
+    std::lock_guard<std::mutex> lock(data_mutex_);
+    return read_status_text_;
+}
+
+void EwrGuiApp::TriggerReadCounters() {
+    if (read_running_ || selected_model_name_.empty()) return;
+
+    read_running_ = true;
+    read_success_ = false;
+    read_status_text_ = "Initiating read...";
+    read_values_.clear();
+
+    if (read_thread_.joinable()) {
+        read_thread_.join();
+    }
+
+    read_thread_ = std::thread(&EwrGuiApp::RunReadThread, this);
+}
+
+void EwrGuiApp::RunReadThread() {
+    std::cout << "[INFO] Initiating EEPROM read sequence..." << std::endl;
+    
+    EwrDeviceHandle hPrinter = AutoConnectEpsonPrinter();
+    if (!hPrinter) {
+        std::cerr << "[ERROR] Could not find an Epson printer to read counter values" << std::endl;
+        std::lock_guard<std::mutex> lock(data_mutex_);
+        read_status_text_ = "Error: Printer not found";
+        read_running_ = false;
+        return;
+    }
+
+    bool is_smart = false;
+    DbPrinterModel smart_model;
+    {
+        std::lock_guard<std::mutex> lock(data_mutex_);
+        for (const auto& m : smart_models_) {
+            if (m.name == selected_model_name_) {
+                is_smart = true;
+                smart_model = m;
+                break;
+            }
+        }
+    }
+
+    if (!is_smart) {
+        std::cerr << "[ERROR] Counter reading is only supported for Smart Protocol models." << std::endl;
+        DisconnectPrinter(hPrinter);
+        std::lock_guard<std::mutex> lock(data_mutex_);
+        read_status_text_ = "Error: Model not supported";
+        read_running_ = false;
+        return;
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(data_mutex_);
+        read_status_text_ = "Reading EEPROM...";
+    }
+
+    bool success = true;
+    std::vector<uint8_t> values;
+    for (uint16_t addr : smart_model.addresses) {
+        uint8_t val = 0;
+        if (ReadEEPROMAddress(hPrinter, smart_model.rkey, addr, val)) {
+            values.push_back(val);
+            std::cout << "[SUCCESS] Read EEPROM Address " << addr << ": " << (int)val << std::endl;
+        } else {
+            std::cerr << "[ERROR] Failed to read EEPROM Address " << addr << std::endl;
+            success = false;
+            break;
+        }
+    }
+
+    DisconnectPrinter(hPrinter);
+
+    std::lock_guard<std::mutex> lock(data_mutex_);
+    if (success) {
+        read_values_ = values;
+        read_success_ = true;
+        read_status_text_ = "Success";
+    } else {
+        read_status_text_ = "Error: Read failed";
+    }
+    read_running_ = false;
+}
+
+void EwrGuiApp::ApplyPremiumTheme() {
+    ImGuiStyle& style = ImGui::GetStyle();
+    style.WindowRounding = 6.0f;
+    style.FrameRounding = 4.0f;
+    style.PopupRounding = 4.0f;
+    style.ScrollbarRounding = 4.0f;
+    style.GrabRounding = 4.0f;
+    style.TabRounding = 4.0f;
+    style.FramePadding = ImVec2(6.0f, 4.0f);
+    style.ItemSpacing = ImVec2(8.0f, 6.0f);
+    style.WindowBorderSize = 1.0f;
+
+    ImVec4* colors = style.Colors;
+    colors[ImGuiCol_Text]                   = ImVec4(0.92f, 0.92f, 0.95f, 1.00f);
+    colors[ImGuiCol_TextDisabled]           = ImVec4(0.50f, 0.50f, 0.55f, 1.00f);
+    colors[ImGuiCol_WindowBg]               = ImVec4(0.09f, 0.09f, 0.10f, 1.00f);
+    colors[ImGuiCol_ChildBg]                = ImVec4(0.12f, 0.12f, 0.13f, 1.00f);
+    colors[ImGuiCol_PopupBg]                = ImVec4(0.14f, 0.14f, 0.16f, 1.00f);
+    colors[ImGuiCol_Border]                 = ImVec4(0.20f, 0.20f, 0.22f, 1.00f);
+    colors[ImGuiCol_BorderShadow]           = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
+    colors[ImGuiCol_FrameBg]                = ImVec4(0.15f, 0.15f, 0.17f, 1.00f);
+    colors[ImGuiCol_FrameBgHovered]         = ImVec4(0.20f, 0.20f, 0.22f, 1.00f);
+    colors[ImGuiCol_FrameBgActive]          = ImVec4(0.25f, 0.25f, 0.28f, 1.00f);
+    colors[ImGuiCol_TitleBg]                = ImVec4(0.12f, 0.14f, 0.18f, 1.00f);
+    colors[ImGuiCol_TitleBgActive]          = ImVec4(0.16f, 0.18f, 0.24f, 1.00f);
+    colors[ImGuiCol_TitleBgCollapsed]       = ImVec4(0.12f, 0.14f, 0.18f, 1.00f);
+    colors[ImGuiCol_MenuBarBg]              = ImVec4(0.14f, 0.14f, 0.16f, 1.00f);
+    colors[ImGuiCol_ScrollbarBg]            = ImVec4(0.10f, 0.10f, 0.12f, 1.00f);
+    colors[ImGuiCol_ScrollbarGrab]          = ImVec4(0.25f, 0.25f, 0.28f, 1.00f);
+    colors[ImGuiCol_ScrollbarGrabHovered]   = ImVec4(0.35f, 0.35f, 0.38f, 1.00f);
+    colors[ImGuiCol_ScrollbarGrabActive]    = ImVec4(0.45f, 0.45f, 0.48f, 1.00f);
+    colors[ImGuiCol_CheckMark]              = ImVec4(0.26f, 0.59f, 0.98f, 1.00f);
+    colors[ImGuiCol_SliderGrab]             = ImVec4(0.24f, 0.52f, 0.88f, 1.00f);
+    colors[ImGuiCol_SliderGrabActive]        = ImVec4(0.26f, 0.59f, 0.98f, 1.00f);
+    colors[ImGuiCol_Button]                 = ImVec4(0.14f, 0.22f, 0.38f, 1.00f);
+    colors[ImGuiCol_ButtonHovered]          = ImVec4(0.20f, 0.32f, 0.54f, 1.00f);
+    colors[ImGuiCol_ButtonActive]           = ImVec4(0.26f, 0.40f, 0.68f, 1.00f);
+    colors[ImGuiCol_Header]                 = ImVec4(0.18f, 0.28f, 0.48f, 0.80f);
+    colors[ImGuiCol_HeaderHovered]          = ImVec4(0.22f, 0.34f, 0.58f, 0.80f);
+    colors[ImGuiCol_HeaderActive]           = ImVec4(0.26f, 0.40f, 0.68f, 0.80f);
 }
 
 } // namespace ewr
