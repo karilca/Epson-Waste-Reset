@@ -366,6 +366,34 @@ namespace ewr {
             return false;
         }
 
+        // 1. Text-based protocol parser (e.g. "@BDC PS\r\nEE:XXXXYY;")
+        std::string respStr(responseData.begin(), responseData.end());
+        size_t bdc_pos = respStr.find("@BDC");
+        size_t ee_pos = respStr.find("EE:");
+        if (bdc_pos != std::string::npos || ee_pos != std::string::npos)
+        {
+            std::stringstream ss;
+            ss << std::hex << std::setw(4) << std::setfill('0') << std::uppercase << address;
+            std::string addrHex = ss.str();
+            
+            std::string target = "EE:" + addrHex;
+            size_t targetPos = respStr.find(target);
+            if (targetPos != std::string::npos)
+            {
+                size_t valPos = targetPos + target.length();
+                if (valPos + 2 <= respStr.length())
+                {
+                    std::string valHex = respStr.substr(valPos, 2);
+                    try {
+                        out_value = static_cast<uint8_t>(std::stoul(valHex, nullptr, 16));
+                        return true;
+                    } catch (...) {
+                        // Fallback to binary parsers if conversion fails
+                    }
+                }
+            }
+        }
+
         uint8_t addr_low = address & 0xFF;
         uint8_t addr_high = (address >> 8) & 0xFF;
         for (size_t i = 0; i + 3 < responseData.size(); ++i)
@@ -403,5 +431,36 @@ namespace ewr {
         std::cerr << "[ERROR] ReadEEPROMAddress could not parse read response (response size: " << responseData.size() << ")" << std::endl;
         std::cerr << "[ERROR] Response Hex:\n" << HexDump(responseData.data(), responseData.size()) << std::endl;
         return false;
+    }
+
+    bool SendRawPacket(EwrDeviceHandle hPrinter, const unsigned char* data, size_t size)
+    {
+        if (!hPrinter || !data || size == 0)
+            return false;
+
+        libusb_device_handle* handle = static_cast<libusb_device_handle*>(hPrinter);
+        int actual_length;
+
+        int write_status = libusb_bulk_transfer(handle, EP_OUT, (unsigned char*)data, size, &actual_length, 2000);
+        if (write_status != 0)
+        {
+            std::cerr << "[ERROR] SendRawPacket failed (libusb error: " << write_status << ")" << std::endl;
+            return false;
+        }
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+        // Read and discard ACK response
+        unsigned char readBuffer[256];
+        while (true)
+        {
+            int read_status = libusb_bulk_transfer(handle, EP_IN, readBuffer, sizeof(readBuffer), &actual_length, 250);
+            if (read_status == LIBUSB_ERROR_TIMEOUT || actual_length == 0)
+                break;
+            if (read_status != 0)
+                break;
+        }
+
+        return true;
     }
 }

@@ -174,4 +174,6 @@ void Render() {}
 void* GetDrawData() { return nullptr; }
 void NewFrame() {}
 
+void SetClipboardText(const char* text) {}
+
 } // namespace ImGui

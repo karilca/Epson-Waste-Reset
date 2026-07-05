@@ -267,4 +267,5 @@ namespace ImGui {
     void Render();
     void* GetDrawData();
     void NewFrame();
+    void SetClipboardText(const char* text);
 }

@@ -498,8 +498,19 @@ void EwrGuiApp::RenderUI() {
     if (ImGui::Button("Clear Logs")) {
         ClearLogs();
     }
+    ImGui::SameLine();
+    if (ImGui::Button("Copy Logs")) {
+        ImGui::SetClipboardText(log_buffer_.GetLogs().c_str());
+    }
     
+    static size_t last_log_size = 0;
     std::string logs = log_buffer_.GetLogs();
+    bool scroll_to_bottom = false;
+    if (logs.size() > last_log_size) {
+        scroll_to_bottom = true;
+    }
+    last_log_size = logs.size();
+
     if (ImGui::BeginListBox("##LogsList", ImVec2(-1.0f, 120.0f))) {
         std::stringstream ss(logs);
         std::string line;
@@ -516,7 +527,9 @@ void EwrGuiApp::RenderUI() {
             }
             ImGui::TextColored(col, "%s", line.c_str());
         }
-        ImGui::SetScrollHereY(1.0f);
+        if (scroll_to_bottom) {
+            ImGui::SetScrollHereY(1.0f);
+        }
         ImGui::EndListBox();
     }
     
@@ -802,9 +815,55 @@ void EwrGuiApp::RunReadThread() {
         read_status_text_ = "Reading EEPROM...";
     }
 
+    // === IEEE 1284.4 D4 Protocol Initialization ===
+    // Must match the same protocol handshake used by GenerateSequence for reset.
+    // Without this, the printer runs out of D4 credits after ~2 reads.
+
+    // 1. Enter IEEE 1284.4 Packet Mode
+    const unsigned char ejl_init[] = {
+        0x00, 0x00, 0x00, 0x1B, 0x01, '@', 'E', 'J', 'L', ' ', '1', '2', '8', '4', '.', '4', '\n',
+        '@', 'E', 'J', 'L', '\n',
+        '@', 'E', 'J', 'L', '\n'
+    };
+    if (!SendRawPacket(hPrinter, ejl_init, sizeof(ejl_init))) {
+        std::cerr << "[ERROR] Failed to send EJL init packet." << std::endl;
+        DisconnectPrinter(hPrinter);
+        std::lock_guard<std::mutex> lock(data_mutex_);
+        read_status_text_ = "Error: Protocol init failed";
+        read_running_ = false;
+        return;
+    }
+
+    // 2. D4 Init
+    const unsigned char d4_init[] = {
+        0x00, 0x00, 0x00, 0x08, 0x01, 0x00, 0x00, 0x10
+    };
+    SendRawPacket(hPrinter, d4_init, sizeof(d4_init));
+
+    // 3. D4 OpenChannel (EPSON-CTRL 0x02, 0x02)
+    const unsigned char d4_open[] = {
+        0x00, 0x00, 0x00, 0x11, 0x01, 0x00, 0x01,
+        0x02, 0x02, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00
+    };
+    SendRawPacket(hPrinter, d4_open, sizeof(d4_open));
+
+    // D4 Credit maintenance packets (sent before each read)
+    const unsigned char d4_credit_grant[] = {
+        0x00, 0x00, 0x00, 0x0B, 0x01, 0x00, 0x03, 0x02, 0x02, 0x00, 0x01
+    };
+    const unsigned char d4_credit_req[] = {
+        0x00, 0x00, 0x00, 0x0D, 0x01, 0x00, 0x04, 0x02, 0x02, 0xFF, 0xFF, 0x00, 0x01
+    };
+
+    std::cout << "[INFO] D4 protocol initialized. Starting EEPROM reads..." << std::endl;
+
     bool success = true;
     std::vector<uint8_t> values;
     for (uint16_t addr : smart_model.addresses) {
+        // D4 Credit Grant + Credit Request before each read
+        SendRawPacket(hPrinter, d4_credit_grant, sizeof(d4_credit_grant));
+        SendRawPacket(hPrinter, d4_credit_req, sizeof(d4_credit_req));
+
         uint8_t val = 0;
         if (ReadEEPROMAddress(hPrinter, smart_model.rkey, addr, val)) {
             values.push_back(val);

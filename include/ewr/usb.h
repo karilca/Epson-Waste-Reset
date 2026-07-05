@@ -16,4 +16,5 @@ namespace ewr {
 
     bool IsEpsonPrinterConnected(uint16_t& out_pid);
     bool ReadEEPROMAddress(EwrDeviceHandle hPrinter, uint16_t rkey, uint16_t address, uint8_t& out_value);
+    bool SendRawPacket(EwrDeviceHandle hPrinter, const unsigned char* data, size_t size);
 }
